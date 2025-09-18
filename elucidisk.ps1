@@ -4,7 +4,7 @@ function Download-ElucidiskZip {
         [string]$downloadLink,
         [string]$destination
     )
-    Write-Output "Downloading"
+    Write-Output "Downloading zip"
     Invoke-WebRequest -Uri $downloadLink -OutFile $destination -UseBasicParsing
 }
 
