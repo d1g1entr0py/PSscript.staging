@@ -18,16 +18,16 @@ function Extract-Zip {
     [System.IO.Compression.ZipFile]::ExtractToDirectory($zipPath, $destination)
 }
 
-# Run the elucidisk executable
+# Run the elucidisk executable and wait for completion
 function Run-Elucidisk {
     param (
         [string]$executablePath,
         [array]$arguments
     )
     if ($arguments) {
-        & $executablePath $arguments
+        Start-Process -FilePath $executablePath -ArgumentList $arguments -Wait -NoNewWindow
     } else {
-        & $executablePath
+        Start-Process -FilePath $executablePath -Wait -NoNewWindow
     }
 }
 
