@@ -4,7 +4,7 @@ function Download-ElucidiskZip {
         [string]$downloadLink,
         [string]$destination
     )
-    Write-Output "Downloading from: $downloadLink"
+    Write-Output "Downloading"
     Invoke-WebRequest -Uri $downloadLink -OutFile $destination -UseBasicParsing
 }
 
@@ -42,7 +42,7 @@ function Remove-File {
             Write-Output "Removed: $Path"
         }
     } catch {
-        Write-Warning "Unable to remove item: $Path - $_"
+        #Write-Warning "Unable to remove item: $Path - $_"
     }
 }
 
