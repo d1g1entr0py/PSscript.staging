@@ -10,6 +10,11 @@
 .PARAMETER MAKKey
     The Windows 10 ESU Multiple Activation Key (MAK) in format XXXXX-XXXXX-XXXXX-XXXXX-XXXXX
 
+.PARAMETER ESUYear
+    The ESU year to activate (1, 2, or 3).
+    Year 1: 2025-2026, Year 2: 2026-2027, Year 3: 2027-2028
+    Default is 1.
+
 .PARAMETER AutoReboot
     If set to $true, the system will automatically reboot after successful activation.
     Default is $false.
@@ -18,12 +23,17 @@
     Path where the log file will be created. Default is C:\Windows\Temp\ESU_Deployment.log
 
 .EXAMPLE
-    .\Deploy-Windows10ESU.ps1 -MAKKey "XXXXX-XXXXX-XXXXX-XXXXX-XXXXX" -AutoReboot $true
+    .\Deploy-Windows10ESU.ps1 -MAKKey "XXXXX-XXXXX-XXXXX-XXXXX-XXXXX" -ESUYear 1 -AutoReboot $true
 
 .NOTES
     Author: Generated for Kaseya VSA Deployment
-    Version: 1.0
+    Version: 2.0
     Requires: Administrator privileges
+
+    ESU Activation IDs:
+    - Year 1 (2025-2026): f520e45e-7413-4a34-a497-d2765967d094
+    - Year 2 (2026-2027): 1043add5-23b1-4afb-9a0f-64343c8f3f8d
+    - Year 3 (2027-2028): 83d49986-add3-41d7-ba33-87c7bfb5c0fb
 #>
 
 [CmdletBinding()]
@@ -32,12 +42,23 @@ param (
     [ValidatePattern('^[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}$')]
     [string]$MAKKey,
 
+    [Parameter(Mandatory=$false, HelpMessage="Enter the ESU Year (1, 2, or 3)")]
+    [ValidateSet(1, 2, 3)]
+    [int]$ESUYear = 1,
+
     [Parameter(Mandatory=$false)]
     [bool]$AutoReboot = $false,
 
     [Parameter(Mandatory=$false)]
     [string]$LogPath = "C:\Windows\Temp\ESU_Deployment.log"
 )
+
+# ESU Activation IDs per year
+$ESUActivationIDs = @{
+    1 = "f520e45e-7413-4a34-a497-d2765967d094"  # Year 1: 2025-2026
+    2 = "1043add5-23b1-4afb-9a0f-64343c8f3f8d"  # Year 2: 2026-2027
+    3 = "83d49986-add3-41d7-ba33-87c7bfb5c0fb"  # Year 3: 2027-2028
+}
 
 # Initialize logging
 function Write-Log {
@@ -112,11 +133,15 @@ function Install-ESUKey {
 
 # Activate the ESU license
 function Activate-ESULicense {
-    try {
-        Write-Log "Activating ESU license..." -Level Info
+    param (
+        [string]$ActivationID
+    )
 
-        # Activate the license
-        $activateResult = cscript.exe //NoLogo C:\Windows\System32\slmgr.vbs /ato 2>&1
+    try {
+        Write-Log "Activating ESU license with Activation ID: $ActivationID..." -Level Info
+
+        # Activate the license with the specific ESU Activation ID
+        $activateResult = cscript.exe //NoLogo C:\Windows\System32\slmgr.vbs /ato $ActivationID 2>&1
 
         # Wait a moment for activation to complete
         Start-Sleep -Seconds 5
@@ -136,19 +161,32 @@ function Activate-ESULicense {
 
 # Verify ESU activation
 function Test-ESUActivation {
-    try {
-        Write-Log "Verifying ESU activation status..." -Level Info
+    param (
+        [string]$ActivationID
+    )
 
-        # Get detailed license information
-        $licenseInfo = cscript.exe //NoLogo C:\Windows\System32\slmgr.vbs /dlv 2>&1
+    try {
+        Write-Log "Verifying ESU activation status for Activation ID: $ActivationID..." -Level Info
+
+        # Get detailed license information for the specific ESU Activation ID
+        $licenseInfo = cscript.exe //NoLogo C:\Windows\System32\slmgr.vbs /dlv $ActivationID 2>&1
+
+        # Convert output to string if it's an array
+        if ($licenseInfo -is [array]) {
+            $licenseInfoStr = $licenseInfo -join "`n"
+        } else {
+            $licenseInfoStr = $licenseInfo
+        }
+
+        Write-Log "License information retrieved" -Level Info
 
         # Check if the license status indicates activation
-        if ($licenseInfo -match "License Status: Licensed") {
+        if ($licenseInfoStr -match "License Status: Licensed") {
             Write-Log "ESU license is active and licensed" -Level Success
             return $true
         } else {
             Write-Log "ESU license verification failed. License may not be activated." -Level Warning
-            Write-Log "License Info: $licenseInfo" -Level Info
+            Write-Log "License Info: $licenseInfoStr" -Level Info
             return $false
         }
     } catch {
@@ -179,8 +217,13 @@ function Restart-SystemIfNeeded {
 # Main execution block
 try {
     Write-Log "=== Windows 10 ESU License Deployment Started ===" -Level Info
-    Write-Log "Script Version: 1.0" -Level Info
+    Write-Log "Script Version: 2.0" -Level Info
     Write-Log "Execution Time: $(Get-Date)" -Level Info
+
+    # Get the Activation ID for the specified ESU year
+    $activationID = $ESUActivationIDs[$ESUYear]
+    Write-Log "ESU Year: $ESUYear ($(2024 + $ESUYear)-$(2025 + $ESUYear))" -Level Info
+    Write-Log "Activation ID: $activationID" -Level Info
 
     # Check for Administrator privileges
     if (-not (Test-Administrator)) {
@@ -218,27 +261,27 @@ try {
         exit 1
     }
 
-    # Activate the ESU license
+    # Activate the ESU license with the specific Activation ID
     Write-Log "=== Activating ESU License ===" -Level Info
-    $activateSuccess = Activate-ESULicense
+    $activateSuccess = Activate-ESULicense -ActivationID $activationID
 
     if (-not $activateSuccess) {
         Write-Log "Failed to activate ESU license. Manual intervention may be required." -Level Error
         exit 1
     }
 
-    # Verify activation
+    # Verify activation using the specific Activation ID
     Write-Log "=== Verifying Activation ===" -Level Info
-    $verifySuccess = Test-ESUActivation
+    $verifySuccess = Test-ESUActivation -ActivationID $activationID
 
     if ($verifySuccess) {
         Write-Log "ESU license has been successfully installed and activated!" -Level Success
 
-        # Display final license status
-        Write-Log "=== Final License Status ===" -Level Info
-        $finalStatus = Get-LicenseStatus
-        if ($finalStatus) {
-            Write-Log $finalStatus -Level Info
+        # Display final license status for the specific ESU
+        Write-Log "=== Final ESU License Status ===" -Level Info
+        $finalESUStatus = cscript.exe //NoLogo C:\Windows\System32\slmgr.vbs /dlv $activationID
+        if ($finalESUStatus) {
+            Write-Log $finalESUStatus -Level Info
         }
 
         # Handle reboot if requested
@@ -252,7 +295,7 @@ try {
         exit 0
     } else {
         Write-Log "ESU license activation could not be verified. Please check the license status manually." -Level Warning
-        Write-Log "Run 'slmgr.vbs /dlv' to view detailed license information." -Level Info
+        Write-Log "Run 'slmgr.vbs /dlv $activationID' to view detailed license information." -Level Info
         exit 1
     }
 
